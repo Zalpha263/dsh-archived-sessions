@@ -38,6 +38,7 @@
   "files": [
     "lib",
     "README.md",
+    "LICENSE",
     "cordis.patch.yml"
   ]
 }
