@@ -1,0 +1,43 @@
+{
+  "name": "dsh-archived-sessions",
+  "version": "1.0.1",
+  "description": "归档会话管理：在设置页查看、恢复、彻底删除已归档的会话（dsh-archived-sessions）。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-api-gateway",
+        "@deepseek-ai/dsh-typert-registry",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.0-rc.6"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "web-ui",
+    "archived-sessions",
+    "plugin"
+  ],
+  "license": "MIT",
+  "files": [
+    "lib",
+    "README.md",
+    "cordis.patch.yml"
+  ]
+}
