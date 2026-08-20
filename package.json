@@ -1,6 +1,6 @@
 {
   "name": "dsh-archived-sessions",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "归档会话管理：在设置页查看、恢复、彻底删除已归档的会话（dsh-archived-sessions）。",
   "type": "module",
   "main": "lib/index.js",
