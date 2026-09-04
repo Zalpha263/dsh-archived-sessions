@@ -52,6 +52,7 @@ node --input-type=module -e "const m = await import('dsh-archived-sessions'); co
 
 ## 版本历史
 
+- **v1.3.0**：适配 DSH 0.1.2-rc.1 + 修 3 个真实 bug——① 删除确认面板 `setConfirmHint` 未定义导致点击「删除」即报 ReferenceError（v1.2.1 起线上存在）：补全 state 并把确认提示用作输入框 placeholder；② 确认门与宿主期望值不一致时必然死锁：改为「输入非空即可提交」+ 宿主权威校验报错回显期望值（渲染层显示/宿主校验双链已核对一致）；③ 消息数统计：`SessionHeader.seedLength` 是死字段（恒 undefined），fork 继承前缀被计入消息数——改用 `sessionQuery.readSession()` 的 `inheritedEventCount` 精确排除。另：设置页槽位契约变更（0.1.2-rc.1 只传 `{close}`，原 `props.useSessions/useWorkspaces` 必崩）→ 改为客户端 `sessions`/`workspaces` 服务的 store 直读（`useSyncExternalStore`）；`insertCss`/`$mount`/`slots.inject` 挂 `ctx.effect` 纤维所有权（HMR/卸载正确清理）；删除后「无法验证日志已删除」也中止（防幻影复活）；`dsh.client.inject` 幽灵条目清理、peer 升至 `^0.1.2-rc.1`；日志目录布局 `root/<projectKey>/<encodeSegment(id)>/<id>/` 说明与路径校验注释（不安全的非恒等 id 会被拒绝）。
 - **v1.2.1**：跨平台删除（日志目录删除命令按平台分支，Windows 用 PowerShell、macOS/Linux 用 `rm -rf`——此前硬编码 PowerShell 导致非 Windows 无法删除）；恢复会话后侧边栏立即刷新（与文档承诺一致）；删除确认失败时回显期望的标题值，且确认界面提示应输入的内容。
 - **v1.2.0**：删除时拦截运行中的会话（防止日志复活）与子会话；删除前路径校验 + 删除后持久化验证。
 - **v1.1.0**：消息数后台统计（按日志 revision 缓存，避免重复解析）。
