@@ -51,6 +51,11 @@ node --input-type=module -e "const m = await import('dsh-archived-sessions'); co
 
 ## 更新日志
 
+### v1.3.2
+- 修复：适配 DSH 0.1.5-rc.2 —— `SessionPersistence.listSnapshots()` 已从 seam 移除（改为 `stat()/list()`，快照为 `{header, revision}`），消息数恢复按 durable revision 缓存；此前每次列举都落到无 revision 的兜底路径，导致消息数永远「统计中…」并反复重读全部归档日志。
+- 修复：永久删除不再依赖已被降为后端私有的 `locate()`——优先用公开的 `resolveCurrentLog(id)`，并以「扫描配置 root 下 <project>/<id> 目录」兜底历史格式世代；文件名白名单放宽为 `session[.vN].jsonl[.zstd]`。此前 0.1.5-rc.2 的 `session.v3.jsonl.zstd` 会被路径校验拒绝，输入标题后必定删除失败。
+- 变更：peer 依赖对齐 `@deepseek-ai/dsh-typert-protocol ^0.1.5-rc.2`。
+
 ### v1.3.1
 - 修复：回退路径下消息数永不更新（每次列举都生成唯一 revision，缓存不再被钉死）。
 
