@@ -42,6 +42,7 @@ dsh plugin --profile web remove dsh-archived-sessions
 | 设置里没有「归档会话」 | 装完没有重启 DSH；重启后再看 |
 | 列表里出现「数据缺失的会话」 | 归档记录还在，但日志文件已经不在了（多半被手动删过）；可以直接删掉这条记录 |
 | 删除时提示「仍在运行」 | 见上面的「已知限制」；重启 DSH 后再删 |
+| 预览提示「读取会话内容失败」 | 该会话是旧格式（v0）日志，当前 DSH 无法读取；不影响删除，按提示输入确认值即可 |
 | 恢复后侧边栏没变化 | 正常会自动刷新；没刷新就 Ctrl+F5 |
 
 ## 开发者
@@ -53,6 +54,10 @@ dsh plugin --profile web remove dsh-archived-sessions
 归档集合存在 workspace 存储域（version 2）的 `archivedSessionIds` 字段里；删除通过 Host 的 `shell` 服务执行平台命令。改完源码：Host 重启 DSH，Client 刷新页面，全程无需构建。
 
 ## 更新日志
+
+### v1.3.3
+- 修复：删除确认不再因为「读不到持久化标题」而死锁。部分归档会话是旧格式（v0）日志，当前 DSH 拒绝迁移读取，宿主读标题时会直接抛 `SessionFormatUnsupportedError`，旧代码把它当成不可恢复的错误（重试永远不会成功）。现在读不到标题就退回到「工作区目录名 / 会话 ID / 界面显示的那串标题」，接受其中任意一个。
+- 变更：界面把显示的标题一起发给宿主，所以「复制界面上的标题」一定能通过确认；确认失败时提示里会列出所有可输入的值。
 
 ### v1.3.2
 - 适配 DSH 0.1.5-rc.2：`SessionPersistence.listSnapshots()` 已从接口中移除，改用 `list()` / `stat()`，消息数恢复按 revision 缓存；永久删除改用公开的 `resolveCurrentLog(id)`，并接受带格式版本号的文件名（`session.v3.jsonl.zstd`）——此前输入标题后必定删除失败。
