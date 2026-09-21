@@ -1,80 +1,72 @@
 # dsh-archived-sessions
 
-> 在 DSH 的设置面板里管理已归档的会话：查看它们、把误归档的会话恢复回原工作区，或者彻底删除。
+在 DSH 设置页管理「已归档」的会话：看一看、恢复回去，或者彻底删除。
 
-## 它做什么
+## 能做什么
 
-**查看**：打开「设置 → 归档会话」就能看到归档列表，而且列表是秒开的——它不解析会话日志，只读归档记录，因此标题、来源工作区与最后活跃时间（绝对时间戳）立刻可见；消息数由后台统计并按照日志 revision 缓存，不会因为反复打开列表而重复解析。
+入口：**设置 → 归档会话**。
 
-**恢复**：点恢复会移除归档记录，会话回到原来工作区的位置，侧边栏随即刷新。
+- **查看**：列表秒开，直接显示会话标题、原工作区和最后活跃时间（绝对时间戳）；消息数在后台统计并缓存，反复打开列表不会重复解析日志。
+- **预览**：点「预览」看会话开头的 6 条对话（用户 / 助手消息，以及调用了哪些工具）。
+- **恢复**：点「恢复到工作区」，归档记录被移除，会话回到原来的工作区位置，侧边栏立即刷新。
+- **彻底删除**：日志文件、工作区归属、归档记录三处一起清理。删除前要输入会话标题确认（防误删）；有子会话的归档会被拦下；删除后还会验证日志确实已经消失，避免会话「复活」。
 
-**删除**：删除是彻底的——日志目录、工作区归属与归档记录三处一起清理，删除前会拦截仍有子会话的归档，删除后会验证日志确实已经消失（验证失败同样中止，避免会话「复活」）；确认时需要输入会话标题，确认值取「持久化标题 → 工作区目录名 → 会话 ID」这条链，当会话摘要缺失时界面会提示你确切应该输入什么。日志目录的删除命令按平台自适应（Windows 用 PowerShell，macOS / Linux 用 `rm -rf`）。
+日志目录的删除命令按平台自适应：Windows 用 PowerShell，macOS / Linux 用 `rm -rf`。
 
 ## 已知限制
 
-- **位于内存中的会话无法删除**：如果某个归档会话在本次运行中被打开过，删除文件后它的持久化写入链会把日志重新写回去，表现为「删了又回来」。界面会把这类会话明确标记为「无法删除 · 位于内存中」，重启 DSH 后即可正常删除。
-- **删除确认需要输入标题**：这是为了防误删；提示文案与宿主校验共用同一条取值链，因此不会出现「看起来输对了却永远匹配不上」的情况。
+- **正在运行的会话删不掉**：如果某个归档会话在本次运行中被打开过，删掉日志后它的写入链会把日志重新写回来，表现为「删了又回来」。界面会把这类会话标成「无法删除 · 仍在运行」，重启 DSH 后即可正常删除。
+- **删除要输入标题**：提示里给的候选值（持久化标题 → 工作区目录名 → 会话 ID）与宿主校验用的是同一条链，不会出现「看起来输对了却匹配不上」。
 
 ## 安装
 
-```bash
-# 发布态（推荐：钉死提交）
-dsh plugin --profile web add github:Zalpha263/dsh-archived-sessions#<完整40位commit>
-
-# 开发态（本地源码目录，必须带 file: 前缀）
-dsh plugin --profile web add file:D:/DeepseekPlugin/dsh-archived-sessions
-```
-
-开发态要注意两点：pnpm（`nodeLinker: hoisted`）在 profile 的 `node_modules` 里生成的是**真实副本**，裸路径会被记成 `link:` 生成 junction，启动时会报 `ERR_MODULE_NOT_FOUND`，所以必须用 `file:` 前缀；而 pnpm 的 `install` / `update` 不会刷新这个副本（实测提示 "Already up to date"），改完源码需要先 remove 再 add 强制重新打包：
+要求：DSH `0.1.5-rc.2`（或兼容的 `0.1.x` 系列）与 [pnpm](https://pnpm.io/zh/)。
 
 ```bash
+# 发布态：钉死提交，最稳定
+dsh plugin --profile web add github:Zalpha263/dsh-archived-sessions#<40位commit>
+
+# 开发态：裸目录路径 = link:（源码即部署，改完不用重装）
+dsh plugin --profile web add D:/path/to/dsh-archived-sessions
+
+# 卸载
 dsh plugin --profile web remove dsh-archived-sessions
-dsh plugin --profile web add file:D:/DeepseekPlugin/dsh-archived-sessions
 ```
 
-之后 Host 改动重启 DSH，仅 Client 改动硬刷新（Ctrl+F5）即可。
+装完**重启 DSH**。之后只有界面（Client）改动刷新页面（Ctrl+F5）即可，Host 改动需要重启。
 
-## 验证
+## 常见问题
 
-```powershell
-cd $env:USERPROFILE\.dsh\profiles\web
-node --input-type=module -e "const m = await import('dsh-archived-sessions'); console.log(typeof m.apply)"
-# 输出 function 即安装成功
-(Invoke-WebRequest http://127.0.0.1:3080/).Content -match 'dsh-archived-sessions'   # 重启后 manifest 含包名
-```
+| 问题 | 原因与解决 |
+| --- | --- |
+| 设置里没有「归档会话」 | 装完没有重启 DSH；重启后再看 |
+| 列表里出现「数据缺失的会话」 | 归档记录还在，但日志文件已经不在了（多半被手动删过）；可以直接删掉这条记录 |
+| 删除时提示「仍在运行」 | 见上面的「已知限制」；重启 DSH 后再删 |
+| 恢复后侧边栏没变化 | 正常会自动刷新；没刷新就 Ctrl+F5 |
 
-## 架构
+## 开发者
 
-- `lib/index.js` —— Host 半区，注册 `archivedSessions` 远程服务（`list` / `preview` / `restore` / `deleteSession`）
-- `lib/client.js` —— Client 半区，web 模块加载器格式，注册 `settings.section` 入口
-- `cordis.patch.yml` —— bundle 层注册行（id: `archived-sessions`）
+- `lib/index.js` —— Host 半区，注册 `archivedSessions` 远程服务（`list` / `preview` / `restore` / `deleteSession`）。
+- `lib/client.js` —— Client 半区，web 模块加载器格式，注册设置页的「归档会话」入口。
+- `cordis.patch.yml` —— bundle 层注册行（id: `archived-sessions`）。
+
+归档集合存在 workspace 存储域（version 2）的 `archivedSessionIds` 字段里；删除通过 Host 的 `shell` 服务执行平台命令。改完源码：Host 重启 DSH，Client 刷新页面，全程无需构建。
 
 ## 更新日志
 
 ### v1.3.2
-- 修复：适配 DSH 0.1.5-rc.2 —— `SessionPersistence.listSnapshots()` 已从 seam 移除（改为 `stat()/list()`，快照为 `{header, revision}`），消息数恢复按 durable revision 缓存；此前每次列举都落到无 revision 的兜底路径，导致消息数永远「统计中…」并反复重读全部归档日志。
-- 修复：永久删除不再依赖已被降为后端私有的 `locate()`——优先用公开的 `resolveCurrentLog(id)`，并以「扫描配置 root 下 <project>/<id> 目录」兜底历史格式世代；文件名白名单放宽为 `session[.vN].jsonl[.zstd]`。此前 0.1.5-rc.2 的 `session.v3.jsonl.zstd` 会被路径校验拒绝，输入标题后必定删除失败。
-- 变更：peer 依赖对齐 `@deepseek-ai/dsh-typert-protocol ^0.1.5-rc.2`。
+- 适配 DSH 0.1.5-rc.2：`SessionPersistence.listSnapshots()` 已从接口中移除，改用 `list()` / `stat()`，消息数恢复按 revision 缓存；永久删除改用公开的 `resolveCurrentLog(id)`，并接受带格式版本号的文件名（`session.v3.jsonl.zstd`）——此前输入标题后必定删除失败。
+- peer 依赖对齐 `@deepseek-ai/dsh-typert-protocol ^0.1.5-rc.2`。
 
 ### v1.3.1
 - 修复：回退路径下消息数永不更新（每次列举都生成唯一 revision，缓存不再被钉死）。
 
-### v1.3.0
-- 变更：适配 DSH 0.1.2-rc.1 —— 设置页槽位改为直读客户端服务，资源挂到 `ctx.effect` 纤维所有权，清理幽灵依赖声明。
-- 修复：删除确认面板引用未定义函数导致点击即报错；确认门与宿主期望值不一致时死锁；fork 继承的消息前缀被错误计入消息数。
-
-### v1.2.1
-- 修复：日志目录删除命令按平台分支，非 Windows 也能删除。
-- 修复：恢复会话后侧边栏立即刷新；确认失败时回显期望的标题。
-
-### v1.2.0
-- 新增：删除时拦截运行中的会话与子会话；删除前路径校验、删除后持久化验证。
-
-### v1.1.0
-- 新增：消息数后台统计（按日志 revision 缓存）。
-
-### v1.0.0
-- 初版：列表 / 预览 / 恢复 / 删除。
+### v1.3.0 及更早
+- **v1.3.0**：适配 DSH 0.1.2-rc.1；修复删除确认面板报错、确认门死锁、fork 继承的消息被多算。
+- **v1.2.1**：删除命令按平台分支（非 Windows 也能删）；恢复后侧边栏立即刷新；确认失败时回显期望标题。
+- **v1.2.0**：删除时拦截运行中的会话与子会话；删除前做路径校验、删除后做持久化验证。
+- **v1.1.0**：消息数改为后台统计并按日志 revision 缓存。
+- **v1.0.0**：初版（列表 / 预览 / 恢复 / 删除）。
 
 ## License
 
