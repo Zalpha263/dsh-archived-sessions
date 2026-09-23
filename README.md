@@ -57,6 +57,10 @@ dsh plugin --profile web remove dsh-archived-sessions
 
 ## 更新日志
 
+### v1.3.6
+- 修复：DSH 0.1.7 起 Remote namespace 挂载失败（strict codec 必须带 `create()` 工厂），「归档会话」取不到数据；`strictCodec()` 改为提供 `create`。
+- 修复：删除会话报 `shell.run is not a function`。宿主 shell 服务在 0.1.7 把 `run(spec)` 改成 `execute(spec)` → `ShellExecution`，前台结果改由 `result()` **方法**给出（不再是属性）。现优先走 `execute()`、回退 `run()`；并补上超时/中断判定（它们以 `exitCode: null` **resolve**，旧判断看不见，会把没跑成的删除当成成功）。peer 对齐 `^0.1.7-alpha.2`。
+
 ### v1.3.5
 - 新增：会话有子会话时，删除确认框给出两个选项——「仅删父会话」与「连同 N 个子会话一起删除」。级联删除整棵子会话树（叶子优先，父会话最后），仍在运行的子会话及其下级会跳过并在结果里说明。
 - 安全：级联与单删共用同一套路径校验（目录名必须等于会话 ID、必须含规范的世代文件名）；任一目录删除失败或删除后仍存在都会中止，不会留下半删的持久记录。
