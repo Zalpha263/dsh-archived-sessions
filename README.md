@@ -57,6 +57,11 @@ dsh plugin --profile web remove dsh-archived-sessions
 
 ## 更新日志
 
+### v1.3.7
+- 迁移：对齐 DSH `0.1.7-rc.1`（自 `0.1.7-alpha.2`）。逐包比对原始产物：`@deepseek-ai/dsh-typert-protocol`（`Remote` / `TypertRemoteService`，含本插件手工 decorator-context 写法）、`@deepseek-ai/dsh-client-modules`（`clientPath()`、`__ModuleLoader__.load({id,factory})`）、以及本插件探测的 6 个 host 服务（`sessionQuery` / `sessionPersistence` / `storageDomain` / `workspaceRegistry` / `sessions` / `shell`）在 `alpha.2 → rc.1` 之间**逐字节未变**，因此无需改接口代码。peer 对齐 `^0.1.7-rc.1`。
+- 修正注释（非兼容性改动）：`shell.run(spec)` 在 `0.1.5-rc.2 → 0.1.7-rc.1` 之间**从未存在** —— 抽象 `ShellExecutor` 与 4 个执行器都只有 `execute(spec)`，`ShellExecSpec` 也没有 `foreground` 字段（“前台”指 await 返回的 `ShellExecution.result()`）。原注释声称「0.1.7 把 `run` 改名成 `execute`」与原始产物不符；`run` 分支保留为不可达的防御代码并如实标注，行为零变化。
+- 验证：隔离 `DSH_HOME` 冷启动 rc.1 → 本插件在宿主 `__DSH_BOOT__` 中已注册、客户端产物 HTTP 200 且含 `__ModuleLoader__.load`；`node --check` 通过。
+
 ### v1.3.6
 - 修复：DSH 0.1.7 起 Remote namespace 挂载失败（strict codec 必须带 `create()` 工厂），「归档会话」取不到数据；`strictCodec()` 改为提供 `create`。
 - 修复：删除会话报 `shell.run is not a function`。宿主 shell 服务在 0.1.7 把 `run(spec)` 改成 `execute(spec)` → `ShellExecution`，前台结果改由 `result()` **方法**给出（不再是属性）。现优先走 `execute()`、回退 `run()`；并补上超时/中断判定（它们以 `exitCode: null` **resolve**，旧判断看不见，会把没跑成的删除当成成功）。peer 对齐 `^0.1.7-alpha.2`。
