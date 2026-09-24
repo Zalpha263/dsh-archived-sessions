@@ -1,13 +1,17 @@
 {
   "name": "dsh-archived-sessions",
-  "version": "1.3.7",
-  "description": "归档会话管理：在设置页查看、恢复、彻底删除已归档的会话（dsh-archived-sessions）。",
+  "version": "1.4.0",
+  "description": "归档会话管理：在设置页查看、恢复、彻底删除或批量删除已归档的会话（dsh-archived-sessions）。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
+    "./plan": "./lib/plan.js",
     "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "node test/plan.test.mjs"
   },
   "dsh": {
     "client": {
@@ -30,6 +34,7 @@
   "license": "MIT",
   "files": [
     "lib",
+    "test",
     "README.md",
     "LICENSE",
     "cordis.patch.yml"
