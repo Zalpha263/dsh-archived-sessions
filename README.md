@@ -26,7 +26,7 @@
 
 ## 安装
 
-要求：DSH `0.1.5-rc.2`（或兼容的 `0.1.x` 系列）与 [pnpm](https://pnpm.io/zh/)。
+要求：DSH `>=0.1.7-rc.1 <0.3.0`（已在 `0.1.7-rc.2`（web 宿主）与 `0.2.0-rc.1`（桌面应用）上实测：兼容检查通过、组成解析通过、Host 激活、客户端产物注册成功）与 [pnpm](https://pnpm.io/zh/)。
 
 ```bash
 # 发布态：钉死提交，最稳定
@@ -40,6 +40,8 @@ dsh plugin --profile web remove dsh-archived-sessions
 ```
 
 装完**重启 DSH**。之后只有界面（Client）改动刷新页面（Ctrl+F5）即可，Host 改动需要重启。
+
+**桌面版（DeepSeek Harness 桌面应用）**：`desktop` profile 由桌面应用独占，`dsh plugin --profile desktop ...` 会被 CLI 直接拒绝（`profile "desktop" is managed exclusively by the Electron application`）。请在桌面应用侧边栏的**插件**页里用**绝对路径**添加本插件目录（或 GitHub 仓库地址），装完重启应用生效。桌面应用自带 Node / pnpm 运行时并走应用内更新（不依赖 npm 全局安装），它的 DSH 版本可能与全局 CLI 不同（实测桌面 `0.2.0-rc.1`、全局 CLI `0.1.7-rc.2`），本插件对两者都通过兼容检查。
 
 ## 常见问题
 
