@@ -62,6 +62,11 @@ dsh plugin --profile web remove dsh-archived-sessions
 
 ## 更新日志
 
+### v1.5.2
+- **适配桌面版**：peer 由 `^0.1.7-rc.1` 放宽为 **`>=0.1.7-rc.1 <0.3.0`**。桌面应用运行 DSH `0.2.0-rc.1`，其兼容检查为 `semver.satisfies(运行时版本, 范围, { includePrerelease: true })`，旧范围上界 `<0.2.0-0` 不含 `0.2.0-rc.1`；而**应用自有 profile 对 peer 不兼容的 bundle 是静默跳过、不打印任何错误**（`dsh-app-boot` 的 `loadProfileDirectory` 把它们收进 `skippedBundles`），表现就是「装上了却不加载」。放宽后同时覆盖 web 宿主 `0.1.7-rc.2` 与桌面 `0.2.0-rc.1`。
+- 走廊核对（`0.1.7-rc.1 → 0.1.7-rc.2 → 0.2.0-rc.1`，逐包 sha256 + 逐行差异）：本插件用到的 host 服务 `sessionQuery` / `sessionPersistence` / `storageDomain` / `workspaceRegistry`（含 `archiveSession(id,{stopActivity})` / `archivedSessionIds` / `detachSession`）/ `sessions` / `shell`（`execute(spec)` → `ShellExecution.result()`）/ `fs`，以及 `slots.inject` / `slots.register`、`settings.section` slot（owner 仍是 `{ close }`）、`ctx.remote.$mount` 的 CONTRIBUTION 校验（strict codec 仍走 `create().parse()`）**全部未变**，无需改代码。该走廊的真实破坏（`workspaceRegistry.initializeDefault` 签名、`workspaces.initializeDefault` 线协议、`client-ui-primitives` 移除 `OnboardingSurface`）本插件都不使用。
+- 桌面版安装方式：`desktop` profile 由桌面应用独占，`dsh plugin --profile desktop ...` 会被 CLI 拒绝（`profile "desktop" is managed exclusively by the Electron application`）；请在桌面应用的**插件**页用**绝对路径**添加本插件目录。
+
 ### v1.5.1
 - 界面：**「批量删除」与「扫描孤儿会话」并到同一行**（同一个操作条）。进入批量模式时该行变成选择工具条（全选 / 清空 / 已选 N / 删除所选 / 退出批量），「扫描孤儿会话」仍在同一行；孤儿说明改为按钮 tooltip + 面板首行，操作条保持紧凑。工具条现在只由 `bulkMode` 决定是否渲染 —— 之前它跟着「列表非空」走，若在批量模式下把列表删空，「退出批量」会消失、卡在批量模式。
 - 修复（安全护栏）：批量删除现在**跳过已离开归档列表的会话**（例如期间被恢复、或在别处被删）。单删路径本来就有这条校验，批量路径此前缺失：勾选后若会话状态变化，会被照着旧选择删掉。
