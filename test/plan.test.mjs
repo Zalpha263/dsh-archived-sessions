@@ -13,10 +13,14 @@ import assert from 'node:assert/strict';
 import {
 	BULK_CONFIRM_WORD,
 	DEFAULT_CASCADE_MODE,
+	ORPHAN_KINDS,
 	classifyChild,
+	classifyOrphan,
+	comparableWorkspacePaths,
 	confirmWordMatches,
 	isInternalChild,
 	normalizeCascadeMode,
+	normalizeComparablePath,
 	shouldDeleteChild,
 	summarizeResults
 } from '../lib/plan.js';
@@ -83,6 +87,34 @@ test('confirmWordMatches is the batch gate and rejects look-alikes', () => {
 	assert.equal(confirmWordMatches(null), false);
 	assert.equal(confirmWordMatches(undefined), false);
 	assert.equal(confirmWordMatches(7), false);
+});
+
+test('normalizeComparablePath and classifyOrphan split the scan into three kinds', () => {
+	// Path spelling: trailing separators go, Windows compares case-insensitively.
+	assert.equal(normalizeComparablePath('D:\\web_homework\\', true), 'd:\\web_homework');
+	assert.equal(normalizeComparablePath('D:\\web_homework\\', false), 'D:\\web_homework');
+	assert.equal(normalizeComparablePath('', true), '');
+	assert.equal(normalizeComparablePath(undefined, true), '');
+	assert.equal(normalizeComparablePath(7, true), '');
+	assert.deepEqual([...comparableWorkspacePaths(['D:\\web_homework\\', '', null], true)], ['d:\\web_homework']);
+
+	assert.deepEqual(ORPHAN_KINDS, ['suspect', 'subagent', 'unaccounted']);
+	const paths = comparableWorkspacePaths(['D:\\web_homework'], true);
+
+	// A subagent child is its own kind even when its cwd names a Workspace: DSH
+	// never gives those a slot, so the missing slot says nothing.
+	assert.equal(classifyOrphan({ cwd: 'D:\\web_homework', origin: 'subagent', parentSession: 'p' }, paths), 'subagent');
+	// An ordinary session whose cwd names a registered Workspace but has no slot
+	// is the delete-residue signature.
+	assert.equal(classifyOrphan({ cwd: 'D:\\web_homework' }, paths), 'suspect');
+	assert.equal(classifyOrphan({ cwd: 'd:\\WEB_HOMEWORK\\' }, paths), 'suspect', 'spelling alone must not hide a residue');
+	// An ordinary session in a directory no Workspace owns is legitimately ungrouped.
+	assert.equal(classifyOrphan({ cwd: 'D:\\web_homework\\sub' }, paths), 'unaccounted');
+	assert.equal(classifyOrphan({ cwd: 'D:\\TraeDemo' }, paths), 'unaccounted');
+	assert.equal(classifyOrphan({}, paths), 'unaccounted');
+	assert.equal(classifyOrphan(null, paths), 'unaccounted');
+	// POSIX policy: the comparison is case-sensitive there.
+	assert.equal(classifyOrphan({ cwd: 'D:\\WEB_HOMEWORK' }, comparableWorkspacePaths(['D:\\web_homework'], false), false), 'unaccounted');
 });
 
 test('summarizeResults aggregates every status and counts removed children', () => {

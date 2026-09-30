@@ -1,6 +1,6 @@
 {
   "name": "dsh-archived-sessions",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "归档会话管理：在设置页查看、恢复、彻底删除、批量删除已归档的会话，并扫描清理无归属的孤儿会话（dsh-archived-sessions）。",
   "type": "module",
   "main": "lib/index.js",
@@ -11,7 +11,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "test": "node test/plan.test.mjs"
+    "test": "node test/plan.test.mjs && node test/host.test.mjs && node test/client.test.mjs"
   },
   "dsh": {
     "client": {
