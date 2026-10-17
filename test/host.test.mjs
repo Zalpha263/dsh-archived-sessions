@@ -13,16 +13,20 @@
 //      deletion actually completed — hence the drained-id ledger reported by
 //      `list().drainedIds`, plumbed from the fire-and-forget queue sweep.
 //   2. an id can re-enter the archive set with no log behind it (the Host's
-//      `archiveSession` accepts a stale row, see README). Only a fresh listing
-//      can tell those entries apart, so `list()` marks them `missing` and
-//      `purgeStaleRecords()` is the ONE action that can retire them.
+//      `archiveSession` accepts a stale row, see README). A fresh listing omits
+//      what it cannot read, so `list()` needs `stat()` plus the on-disk artifact
+//      to tell "really missing" from "present but unreadable", and
+//      `purgeStaleRecords()` may retire ONLY the positively missing entries.
 //
 // The stubs mirror the real contracts that matter here:
 //   - the storage domain's `global.get()` returns the SAME object every call
 //     (it is the object the registry caches; a replace would resurrect ids),
 //   - `workspaceRegistry.archivedSessionIds` is read live off that object,
-//   - `sessionPersistence.list()` is the medium: an id whose log is gone is
-//     simply absent from it,
+//   - `sessionPersistence.list()` is the medium: an unreadable log is simply
+//     absent from it,
+//   - `sessionPersistence.stat()` returns a snapshot for a stored session,
+//     `undefined` for an absent one, and rejects with
+//     `SessionFormatUnsupportedError` for a log this build cannot interpret,
 //   - `sessions.get()` is the in-memory store (a live session's log can be
 //     re-created, so those ids are never retired).
 
@@ -45,7 +49,10 @@ function makeWorld(options = {}) {
 		live = [],
 		workspaces = [],
 		listThrows = false,
-		queryThrows = false
+		queryThrows = false,
+		stat = null,
+		archiveThrows = false,
+		unarchiveThrows = false
 	} = options;
 
 	// The domain's global state object: identity-stable, exactly like the object
@@ -70,14 +77,24 @@ function makeWorld(options = {}) {
 		}
 	}));
 
-	const headers = snapshots.map((snapshot) => ({ cwd: 'D:\\stub', ...snapshot }));
+	// `formatStatus` belongs to the listing record, not to the stored header.
+	const records = snapshots.map((snapshot) => {
+		const { formatStatus, ...headerFields } = snapshot;
+		return {
+			header: { cwd: 'D:\\stub', ...headerFields },
+			revision: 'rev-' + headerFields.id,
+			...(formatStatus === undefined ? {} : { formatStatus })
+		};
+	});
 	const liveById = new Map(live.map((id) => [id, { id, header: { id } }]));
+	const registryCalls = [];
 
 	const world = {
 		get state() {
 			return current;
 		},
 		workspaces: entities,
+		registryCalls,
 		storageDomain: {
 			get: (name) => (name === 'workspace'
 				? { global: { get: () => current, set: async (next) => { current = next; } } }
@@ -88,7 +105,27 @@ function makeWorld(options = {}) {
 				return current.archivedSessionIds;
 			},
 			list: () => entities,
-			archiveSession: async () => {}
+			// Mirror the real seam's decisive early return: an already archived id
+			// resolves WITHOUT writing or dispatching the stop, so a test can prove
+			// the stop path actually reached the seam.
+			archiveSession: async (sessionId, callOptions) => {
+				const already = current.archivedSessionIds.includes(sessionId);
+				registryCalls.push(['archiveSession', sessionId, callOptions, already]);
+				if (archiveThrows) throw new Error('archive seam unavailable');
+				if (already) return;
+				current = {
+					...current,
+					archivedSessionIds: [...current.archivedSessionIds, sessionId]
+				};
+			},
+			unarchiveSession: async (sessionId) => {
+				registryCalls.push(['unarchiveSession', sessionId]);
+				if (unarchiveThrows) throw new Error('unarchive seam unavailable');
+				current = {
+					...current,
+					archivedSessionIds: current.archivedSessionIds.filter((id) => id !== sessionId)
+				};
+			}
 		},
 		sessions: {
 			get: (id) => liveById.get(id),
@@ -98,16 +135,35 @@ function makeWorld(options = {}) {
 			config: { root: 'D:\\stub-root' },
 			list: async () => {
 				if (listThrows) throw new Error('session medium unavailable');
-				return headers.map((header) => ({ header, revision: 'rev-' + header.id }));
+				return records.map((record) => ({
+					header: record.header,
+					revision: record.revision,
+					...(record.formatStatus === undefined ? {} : { formatStatus: record.formatStatus })
+				}));
 			},
-			resolveCurrentLog: async (id) => (headers.some((header) => header.id === id)
+			// The real stat(): a snapshot for a stored session, `undefined` for an
+			// absent one, and a rejection for a log this build cannot interpret.
+			stat: stat ?? (async (id) => {
+				const record = records.find((entry) => entry.header.id === id);
+				if (record === undefined) return undefined;
+				return {
+					header: record.header,
+					revision: record.revision,
+					...(record.formatStatus === undefined ? {} : { formatStatus: record.formatStatus })
+				};
+			}),
+			resolveCurrentLog: async (id) => (records.some((record) => record.header.id === id)
 				? 'D:\\stub-root\\proj\\' + id + '\\session.jsonl'
 				: undefined)
 		},
 		query: {
 			listSessions: async () => {
 				if (queryThrows) throw new Error('session query unavailable');
-				return headers.map((header) => ({ header, revision: 'rev-' + header.id }));
+				return records.map((record) => ({
+					header: record.header,
+					revision: record.revision,
+					...(record.formatStatus === undefined ? {} : { formatStatus: record.formatStatus })
+				}));
 			},
 			readSession: async () => ({ events: [], inheritedEventCount: 0 }),
 			readTitleSnapshot: async () => ({ title: { title: 'stub title' } }),
@@ -265,4 +321,172 @@ test('scanOrphans splits suspects, subagent children and ungrouped sessions', as
 	assert.deepEqual(result.counts, { suspect: 1, subagent: 1, unaccounted: 1 });
 	assert.deepEqual(result.kinds, ['suspect', 'subagent', 'unaccounted']);
 	assert.equal(result.scanned, 6);
+});
+
+// --- P1-a: a stop request must actually reach the archive seam --------------
+//
+// `archiveSession(id, { stopActivity: true })` early-returns for an id that is
+// already in the archive set, and every session this plugin deletes is
+// archived. The stub mirrors that early return (see makeWorld), so these tests
+// fail if the Host ever calls the seam directly again.
+
+test('P1-a: requesting a stop unarchives first, so the seam really dispatches it', async (t) => {
+	await withHome(t);
+	const world = makeWorld({
+		archived: ['session-live'],
+		snapshots: [{ id: 'session-live', cwd: 'D:\\proj' }],
+		live: ['session-live']
+	});
+	const service = boot(world);
+
+	const result = await service.deleteSession('session-live', 'stub title', 'title', false, false);
+
+	assert.equal(result.pending, true, 'a live session is queued, never deleted in place');
+	assert.equal(result.stopError, null, 'the stop request must not report a failure');
+	assert.deepEqual(world.registryCalls, [
+		['unarchiveSession', 'session-live'],
+		// The final `false` is the stub's "already archived" flag: false proves the
+		// call got past the early return and a stop was really dispatched.
+		['archiveSession', 'session-live', { stopActivity: true }, false]
+	]);
+	assert.deepEqual(world.state.archivedSessionIds, ['session-live'], 'the session stays archived while queued');
+});
+
+test('P1-a: a failed re-archive restores the archive entry and is reported', async (t) => {
+	await withHome(t);
+	const world = makeWorld({
+		archived: ['session-live'],
+		snapshots: [{ id: 'session-live', cwd: 'D:\\proj' }],
+		live: ['session-live'],
+		archiveThrows: true
+	});
+	const service = boot(world);
+
+	const result = await service.deleteSession('session-live', 'stub title', 'title', false, false);
+
+	assert.equal(result.pending, true);
+	assert.match(result.stopError, /archive seam unavailable/);
+	assert.deepEqual(world.state.archivedSessionIds, ['session-live'], 'the compensating write must restore the entry');
+});
+
+// --- P1-b: missing / unreadable / present are three different states -------
+
+/** The shape of the real refusal for a stored log this build cannot interpret. */
+function unsupportedFormatError(sessionId) {
+	const error = new Error('session "' + sessionId + '" uses log format v9, but this harness reads only v4');
+	error.name = 'SessionFormatUnsupportedError';
+	return error;
+}
+
+test('P1-b: an unreadable log is not a stale record — cleanup keeps its ownership', async (t) => {
+	await withHome(t);
+	const world = makeWorld({
+		archived: ['session-legacy', 'session-gone'],
+		workspaces: [{ id: 'w1', sessionIds: ['session-legacy', 'session-gone'] }],
+		stat: async (id) => {
+			if (id === 'session-legacy') throw unsupportedFormatError(id);
+			return undefined;
+		}
+	});
+	const service = boot(world);
+
+	// list() must report the log as unreadable, not as "日志已不存在".
+	const listed = await service.list();
+	const legacy = listed.items.find((item) => item.sessionId === 'session-legacy');
+	assert.equal(legacy.missing, false);
+	assert.equal(legacy.unreadable, true);
+	assert.match(legacy.unreadableReason, /format v9/);
+	assert.equal(listed.staleLabel, '日志已不存在（归档记录失效）');
+
+	const result = await service.purgeStaleRecords();
+	assert.deepEqual(result.removed, ['session-gone'], 'only the positively missing record is retired');
+	assert.deepEqual(result.skippedUnreadable, ['session-legacy']);
+	assert.deepEqual(result.skippedLive, []);
+	assert.deepEqual(world.state.archivedSessionIds, ['session-legacy'], 'the unreadable archive entry survives');
+	assert.deepEqual(world.workspaces[0].sessionIds, ['session-legacy'], 'its workspace accounting survives');
+	assert.deepEqual(world.workspaces[0].detached, ['session-gone']);
+});
+
+test('P1-b: stat() undefined plus no artifact is a real missing record — cleanup may retire it', async (t) => {
+	await withHome(t);
+	const world = makeWorld({
+		archived: ['session-gone'],
+		workspaces: [{ id: 'w1', sessionIds: ['session-gone'] }],
+		stat: async () => undefined
+	});
+	const service = boot(world);
+
+	const result = await service.purgeStaleRecords();
+	assert.deepEqual(result.removed, ['session-gone']);
+	assert.deepEqual(result.skippedUnreadable, []);
+	assert.deepEqual(world.state.archivedSessionIds, []);
+	assert.deepEqual(world.workspaces[0].sessionIds, []);
+});
+
+test('P1-b: deleteSession refuses an unreadable log instead of orphaning it', async (t) => {
+	await withHome(t);
+	const world = makeWorld({
+		archived: ['session-legacy'],
+		workspaces: [{ id: 'w1', sessionIds: ['session-legacy'] }],
+		stat: async (id) => { throw unsupportedFormatError(id); }
+	});
+	const service = boot(world);
+
+	await assert.rejects(
+		() => service.deleteSession('session-legacy', 'anything', '日志已不存在（归档记录失效）', false, false),
+		/无法读取/
+	);
+	assert.deepEqual(world.state.archivedSessionIds, ['session-legacy']);
+	assert.deepEqual(world.workspaces[0].sessionIds, ['session-legacy']);
+	assert.deepEqual(world.workspaces[0].detached, []);
+});
+
+test('P1-b: list() passes formatStatus through for a migration-required log', async (t) => {
+	await withHome(t);
+	const world = makeWorld({
+		archived: ['session-v3'],
+		snapshots: [{ id: 'session-v3', formatStatus: 'migration-required' }]
+	});
+	const service = boot(world);
+
+	const result = await service.list();
+	const item = result.items[0];
+	assert.equal(item.missing, false);
+	assert.equal(item.unreadable, false);
+	assert.equal(item.formatStatus, 'migration-required');
+	assert.equal(result.staleLabel, '日志已不存在（归档记录失效）', 'the Host owns the stale-row wording');
+});
+
+test('P1-b: the queue sweep never retires records for an unreadable log', async (t) => {
+	const home = await withHome(t);
+	let statCalls = 0;
+	const world = makeWorld({
+		archived: ['session-legacy'],
+		workspaces: [{ id: 'w1', sessionIds: ['session-legacy'] }],
+		stat: async (id) => {
+			statCalls += 1;
+			throw unsupportedFormatError(id);
+		}
+	});
+	await writeFile(
+		join(home, PENDING_FILE),
+		JSON.stringify({ sessionIds: ['session-legacy'], recentlyDeleted: [], updatedAt: Date.now() }),
+		'utf8'
+	);
+	const service = boot(world);
+
+	// list() fires the sweep without awaiting. The archived id is also probed by
+	// the listing itself, so wait for both probes to have happened.
+	await service.list();
+	for (let attempt = 0; attempt < 100 && statCalls < 2; attempt += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+	assert.ok(statCalls >= 2, 'the sweep must probe the queued id');
+	await new Promise((resolve) => setTimeout(resolve, 20));
+
+	const pending = JSON.parse(await readFile(join(home, PENDING_FILE), 'utf8'));
+	assert.deepEqual(pending.sessionIds, ['session-legacy'], 'the unreadable id stays queued');
+	assert.deepEqual(world.state.archivedSessionIds, ['session-legacy']);
+	assert.deepEqual(world.workspaces[0].sessionIds, ['session-legacy']);
+	assert.deepEqual(world.workspaces[0].detached, []);
 });

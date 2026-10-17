@@ -9,7 +9,7 @@
 - **查看**：列表秒开，直接显示会话标题、原工作区和最后活跃时间（绝对时间戳）；消息数在后台统计并缓存，反复打开列表不会重复解析日志。
 - **预览**：点「预览」看会话开头的 6 条对话（用户 / 助手消息，以及调用了哪些工具）。
 - **恢复**：点「恢复到工作区」，归档记录被移除，会话回到原来的工作区位置，侧边栏立即刷新。
-- **彻底删除**：日志文件、工作区归属、归档记录三处一起清理。删除前要输入会话标题确认（防误删）；有子会话的归档会被拦下；删除后还会验证日志确实已经消失，避免会话「复活」。删除成功后**侧栏会话列表在同一拍刷新**，不会留下「未分组」的残留行（v1.5.3）。
+- **彻底删除**：日志文件、工作区归属、归档记录三处一起清理。删除前要输入会话标题或会话 ID 确认（防误删）；有子会话时先让你选「仅删父会话」还是「连同子会话一起删除」；删除后还会验证日志确实已经消失，避免会话「复活」。删除成功后**侧栏会话列表在同一拍刷新**，不会留下「未分组」的残留行。**日志存在但当前 DSH 版本读不了的会话不会被「只删记录」**：那种删除会拒绝，详见「已知限制」。
 - **批量删除**：点「批量删除」进入批量模式，每张卡片左侧出现复选框，顶部工具条提供「全选 / 清空 / 已选 N 项 / 删除所选 / 退出批量」。确认弹窗会列出将被删除的会话（超过 20 个折叠）、显示每个会话的子会话构成，并要求**勾选「我知道这些会话不可恢复」+ 输入固定词「删除」**才会执行（这道闸在 Host 侧也校验，绕过界面直接调 Remote 同样会被拒）。
   - 子会话**分级处理**：`origin: 'subagent'` 的子代理子会话（界面上看不到、DSH 也没有别的删除入口）**默认一并删除**；你自己 **fork** 出来的子会话（有独立对话内容）**默认保留**，想连它们一起删就在弹窗里选「全部级联」。仍**在运行**的后代一律跳过并逐条报告。
   - 执行后给出**逐条结果**（✅ 已删除 / ⏳ 待删除 / ❌ 失败 / ⏭ 跳过 + 原因）与汇总（成功、待删除、失败、连带删除的子会话数）；一个失败不会中断整批。
@@ -18,20 +18,22 @@
   - **子代理子会话**（`origin: 'subagent'`）：**每委派一次子代理就产生一条**。DSH 从不给这类会话工作区归属（`dsh-subagent` 的 `childSessionMeta` 只写 cwd / parentSession / origin，没有任何 attach 调用），侧栏也直接不显示它们，所以它们天生满足「无归属」。它们是会话的**委派历史**而不是垃圾：行内会标出父会话以及「父会话仍在」，删掉会丢内容。
   - **未分组的普通会话**：cwd 没有注册工作区，本来就会显示在侧栏「未分组」；删掉会丢内容。
   扫描**只读**且逐条保留证据（**可读 / 不可读**、事件数、是否仍在内存、创建时间、原 cwd、父会话）。清理仍需「勾选 + 输入固定词『删除』」并在 Host 侧校验；仍在内存的走待删除队列，其余当场清除。
-- **失效归档记录清理**：删除后若残留行又被重新归档（宿主的归档校验查的是开机时建立、之后只增不删的头部索引，日志已不在的 id 仍会被判定为「存在」而接受），本页会出现标注「日志已不存在（归档记录失效）」的条目。顶部**「清理失效记录（N）」**一键清掉这些死记录 —— 只清「归档集合里有、刚取到的列表里没有」的 id，跳过仍在内存中的会话，不触碰任何会话内容。
+- **失效归档记录清理**：删除后若残留行又被重新归档（宿主的归档校验查的是开机时建立、之后只增不删的头部索引，日志已不在的 id 仍会被判定为「存在」而接受），本页会出现标注「日志已不存在（归档记录失效）」的条目。顶部**「清理失效记录（N）」**一键清掉这些死记录 —— 只清「归档集合里有、刚取到的列表里没有、并且 `stat()`/盘面探测确认日志真的不存在」的 id，跳过仍在内存中的会话，不触碰任何会话内容。**日志仍在、只是当前版本读不了的记录会被保留**（日志存在却摘掉归属，等于把它变成孤儿）；这类行会标注「不可读 · 需迁移/升级」，清理面板也会说明它们不在清理范围内。
 
 日志目录的删除命令按平台自适应：Windows 用 PowerShell，macOS / Linux 用 `rm -rf`。
 
 ## 已知限制
 
-- **仍在内存中的会话走「待删除队列」，绝不当场删日志**：归档只把会话从列表隐藏、**不会停止它**，所以刚归档的那个会话一定还在内存里。运行中的会话会继续写日志 —— 如果当场把日志删掉，而验证只是「删完立刻重新列举」，它的写入链会在验证之后把日志重建出来；那时工作区归属与归档记录**已经移除**，它就以「未分类 + 数据缺失」的孤儿形态回到左侧工作区（v1.4.0 的回归，v1.4.1 修掉）。现在的做法是：先请 DSH 官方的 `archiveSession(id, { stopActivity: true })` 停止它的运行中工作（turn、子代理后代、它拥有的后台任务与计划），然后**直接加入待删除队列**，等它退出内存时自动完成（最迟下次重启 DSH —— 刚启动时没有会话在内存里）。队列状态显示在列表上方，界面标记是「仍在内存 · 将加入待删除」。
+- **仍在内存中的会话走「待删除队列」，绝不当场删日志**：归档只把会话从列表隐藏、**不会停止它**，所以刚归档的那个会话一定还在内存里。运行中的会话会继续写日志 —— 如果当场把日志删掉，而验证只是「删完立刻重新列举」，它的写入链会在验证之后把日志重建出来；那时工作区归属与归档记录**已经移除**，它就以「未分类 + 数据缺失」的孤儿形态回到左侧工作区。现在的做法是：先请 DSH 官方的归档接缝停止它的运行中工作（turn、子代理后代、它拥有的后台任务与计划），然后**加入待删除队列**，等它退出内存时自动完成（最迟下次重启 DSH —— 刚启动时没有会话在内存里）。队列状态显示在列表上方，界面标记是「仍在内存 · 将加入待删除」。
+  - 停止请求为什么要「先解除归档再归档」：官方接缝 `archiveSession(id, { stopActivity: true })` 对**已经在归档集合里的 id** 会直接返回（不写、不问、不停止），而本插件删除的每个会话都是已归档的 —— 旧写法因此永远派发不出停止。v1.6.1 起 Host 先调 `unarchiveSession(id)`，再带 `stopActivity` 重新归档，`workspace/session-stop` 才会真正发出。两次 durable 写之间该 id 会短暂不在归档集合里（侧栏可能闪一行），随即写回；这也是官方公开方法组合的已知窗口。
+- **日志读不了 ≠ 日志不存在**：DSH 的 `SessionPersistence.list()` 会静默省略它读不了的日志，只凭「列表里没有」清理归档记录，会把仍有内容的日志的工作区归属摘掉，让它变成孤儿。v1.6.1 起 Host 用三态判定：列表里有 = 存在；列表里没有 + `stat(id)` 返回 `undefined` 且盘面也没有该会话的日志文件 = 真缺失（可清理）；`stat` 拒绝（格式不受支持/损坏）或盘面仍有日志 = 不可读（**保留归属与归档记录**）。`formatStatus: 'migration-required'` 的历史格式日志是正常可读条目，列表里会标注「待迁移」，绝不按缺失清理。
 - **待删除队列的落盘位置**：`$DSH_HOME/archived-sessions-pending-delete.json`（插件自有的一个小 JSON 文件，原子写入）。除队列外还记录 24 小时内**已清除的会话 id**，用于自愈：万一某个已清除的日志又被写回来，下一次清扫会把它重新入队、等它退出内存后再删，不会再留下孤儿。这是本插件唯一会写的数据文件。
-- **删除要输入标题或会话 ID**：每张卡片上都会显示该会话的 ID，确认框里还会再给一次。标题、工作区目录名、会话 ID、以及界面上显示的那串标题，输入任意一个都算通过。
+- **删除要输入标题或会话 ID**：每张卡片上都会显示该会话的 ID，确认框里还会再给一次。标题、工作区目录名、会话 ID、以及界面上显示的那串标题（包括失效记录的固定文案），输入任意一个都算通过。
 - **有子会话时会先问一次**：子会话的日志是独立的，删父会话不会损坏它们。确认框给两个选择——「仅删父会话」（子会话保留，只失去父会话关联）或「连同 N 个子会话一起删除」（整棵子会话树一起永久删除；仍在运行的子会话及其下级会被跳过）。批量删除用的是上面的分级默认值。
 
 ## 安装
 
-要求：DSH `>=0.2.0-rc.1 <0.3.0`（已在 `0.2.0-rc.1`（web 宿主 / npm 全局 CLI）与 `0.2.0-rc.2`（桌面应用内建运行时）上校验：兼容性闸门通过、组成解析通过、Host 激活、客户端产物注册成功）与 [pnpm](https://pnpm.io/zh/)。
+要求：DSH `>=0.2.0-rc.1 <0.3.0-0`（由 `engines.dsh` 声明；`peerDependencies` 里保留 typert-protocol 的同范围声明，0.2.0-rc.2 的闸门只认 peer）与 [pnpm](https://pnpm.io/zh/)。已核对宿主（静态契约核对，安装后仍需在目标宿主冒烟）：**`0.2.0-rc.2`（web 宿主 / npm 全局 CLI）** 与 **`0.2.1-rc.1`（桌面应用内建运行时）** —— 兼容性闸门、组成解析、Host 激活、客户端产物注册均通过。
 
 ```bash
 # 发布态：钉死提交，最稳定
@@ -46,31 +48,54 @@ dsh plugin --profile web remove dsh-archived-sessions
 
 装完**重启 DSH**。之后只有界面（Client）改动刷新页面（Ctrl+F5）即可，Host 改动需要重启。
 
-**桌面版（DeepSeek Harness 桌面应用）**：`desktop` profile 由桌面应用独占，`dsh plugin --profile desktop ...` 会被 CLI 直接拒绝（`profile "desktop" is managed exclusively by the Electron application`）。请在桌面应用侧边栏的**插件**页里用**绝对路径**添加本插件目录（或 GitHub 仓库地址），装完重启应用生效。桌面应用自带 Node / pnpm 运行时并走应用内更新（不依赖 npm 全局安装），它的 DSH 版本可能与全局 CLI 不同（实测桌面 `0.2.0-rc.1`、全局 CLI `0.1.7-rc.2`），本插件对两者都通过兼容检查。
+**桌面版（DeepSeek Harness 桌面应用）**：`desktop` profile 由桌面应用独占，`dsh plugin --profile desktop ...` 会被 CLI 直接拒绝（`profile "desktop" is managed exclusively by the Electron application`）。请在桌面应用侧边栏的**插件**页里用**绝对路径**添加本插件目录（或 GitHub 仓库地址），装完重启应用生效。桌面应用自带 Node / pnpm 运行时并走应用内更新（不依赖 npm 全局安装），它的 DSH 版本可能与全局 CLI 不同（实测桌面 `0.2.1-rc.1`、web / 全局 CLI `0.2.0-rc.2`），本插件对两者都通过兼容检查。
 
 ## 常见问题
 
 | 问题 | 原因与解决 |
 | --- | --- |
 | 设置里没有「归档会话」 | 装完没有重启 DSH；重启后再看 |
-| 列表里出现「日志已不存在（归档记录失效）」 | 归档集合里还留着这个 id，但会话日志已经不在（正常是删除后又被侧栏的残留行重新归档进来的）。点顶部「清理失效记录（N）」一键清掉；只清记录，不删内容 |
-| 删除后侧栏还留着那一行（未分组） | 已修（v1.5.3）：所有删除路径都会在同一拍刷新侧栏会话列表。旧版本请 Ctrl+F5 |
-| 删除时提示「仍在运行」 | 见上面的「已知限制」；重启 DSH 后再删 |
+| 列表里出现「日志已不存在（归档记录失效）」 | 归档集合里还留着这个 id，但会话日志已经不在（正常是删除后又被侧栏的残留行重新归档进来的）。点顶部「清理失效记录（N）」一键清掉；只清记录，不删内容。日志仍在但读不了的记录**不会**出现在清理清单里 |
+| 删除后侧栏还留着那一行（未分组） | 所有删除路径都会在同一拍刷新侧栏会话列表；没刷新就 Ctrl+F5 |
+| 删除时提示「仍在运行」 | 这是旧版本的拒绝行为。现在运行中的会话会先请求停止并进入待删除队列，退出内存后自动删除（最迟下次重启 DSH） |
+| 删除时提示「日志文件存在，但当前 DSH 版本无法读取」 | 这是 v1.6.1 的安全拒绝：日志确实存在（旧格式/未来格式/头部损坏），只删归档记录会把日志留成孤儿。请先迁移或升级 DSH，或点「恢复到工作区」把它移出归档列表 |
 | 删除时提示「该会话有 N 个子会话」 | 这是二次确认不是拒绝：选「仅删父会话」或「连同 N 个子会话一起删除」。仍在运行的子会话会被跳过 |
-| 预览提示「读取会话内容失败」 | 该会话是旧格式（v0）日志，当前 DSH 无法读取；不影响删除，按提示输入确认值即可 |
+| 预览提示「读取会话内容失败」 | 该日志当前版本读不了（旧格式 / 未来格式 / 头部损坏）。它不会被当作「日志不存在」清理，归档记录与工作区归属都会保留；需要迁移或升级 DSH 才能预览 |
 | 恢复后侧边栏没变化 | 正常会自动刷新；没刷新就 Ctrl+F5 |
 
 ## 开发者
 
-- `lib/index.js` —— Host 半区，注册 `archivedSessions` 远程服务（`list` / `preview` / `restore` / `deleteSession` / `planDelete` / `deleteSessions` / `scanOrphans` / `purgeOrphans` / `purgeStaleRecords`）。
+- `lib/index.js` —— Host 半区：注册 `archivedSessions` 远程服务（`list` / `preview` / `restore` / `deleteSession` / `planDelete` / `deleteSessions` / `scanOrphans` / `purgeOrphans` / `purgeStaleRecords`）、待删除队列、归档集合写入与消息数缓存。
+- `lib/logs.js` —— Host 的只读日志/介质辅助（纯函数）：`resolveSessionDir`、`loadSnapshots`、`buildById`、`subtreeOf`、`probeLogState`、路径工具。
 - `lib/client.js` —— Client 半区，web 模块加载器格式，注册设置页的「归档会话」入口。
 - `lib/plan.js` —— 纯策略函数（子会话分类 / 级联模式 / 确认词 / 结果汇总 / 孤儿三类分拣）。
+- `icon.svg` —— 16×16 单色线性图标（`stroke="currentColor"`），由 manifest 的 `icon` 字段引用。
 - `cordis.patch.yml` —— bundle 层注册行（id: `archived-sessions`）。
-- `npm test` —— `test/plan.test.mjs`（策略单测）+ `test/host.test.mjs`（真 cordis Context + 假服务的 Host 半区集成测试）+ `test/client.test.mjs`（客户端接线冒烟）。
+- 测试（本机直接跑，避免 `npm test` 在受限沙箱里 EPERM）：
+  `node test/plan.test.mjs`（策略单测）、`node test/host.test.mjs`（真 cordis Context + 假服务的 Host 集成测试）、`node test/client.test.mjs`（客户端接线冒烟 + 迷你渲染器）；三者都须 exit 0。`node --check lib/*.js` 检查语法。
 
 归档集合存在 workspace 存储域（version 2）的 `archivedSessionIds` 字段里；删除通过 Host 的 `shell` 服务执行平台命令。改完源码：Host 重启 DSH，Client 刷新页面，全程无需构建。
 
+### 与 DSH 0.2.x 的接缝（为什么代码写成这样）
+
+这些是源码注释里不再逐条记账的运行时事实（0.2.0-rc.2 与 0.2.1-rc.1 逐点核对过）：
+
+- **归档集合与存储域**：`storageDomain.get('workspace').global.get()` 返回存储域持有的同一个状态对象；registry 每次 `requireState()` 都重新读它。本插件因此原地修改 `archivedSessionIds` 并 `set`，写失败时回滚。官方写入用新对象（`{...state, archivedSessionIds:[...]}`），语义等价；插件不复刻它的 pin 处理，因为归档集合之外只动这一步。
+- **停止活动**：`archiveSession(id, { stopActivity: true })` 先查归档集合，命中就 `return`；否则 `sessionKnown`，写入归档（顺带清 pin），最后 `stopSessionActivity` → `ctx.parallel('workspace/session-stop')`。`unarchiveSession(id)` 不做存在性检查，不在集合里也直接返回。两者在两个目标版本里一致，所以「先 unarchive、再 archive(stopActivity)」是公开方法组合，不需要私有接缝。
+- **列表与三态**：`SessionPersistence` 公开面是 `create/open/flush/stat/list`（没有删除 API，`ctx.fs` 也不能删）。`list()` 的每条是 `{header, revision, formatStatus?, sizeBytes?}`，不认识的产物会被静默省略；`formatStatus` 由 `storedVersion === currentVersion ? 'current' : 'migration-required'` 决定。`stat(id)` 对「没有」返回 `undefined`，对不受支持的格式抛 `SessionFormatUnsupportedError`，对解析不了的 header 也返回 `undefined` —— 所以「真缺失」还要求盘面没有该会话的日志文件（`lib/logs.js` 的 `findLogArtifact`）。删除路径只认 `session[.vN].jsonl[.zstd]` 这类规范文件名，并在 shell 删除前核对目录名等于会话 id。
+- **可读性与迁移**：`migration-required` 的日志仍可被 `readSurface` 在内存里迁移读出，因此可以预览、删除；本插件只把它标成「待迁移」，不当缺失清理。读不了的日志（旧到没有迁移路径、或来自更新版本的格式）会被保留归属。
+- **Remote/宿主契约**：Remote 描述符仍是 `invocation.kind: 'direct'` + strict codec，`$mount` 后经 `ctx.get('remote.archivedSessions')` 调用（不能把本 entry 自己的 namespace 写进 `inject`）。`settings.section` 的 owner props 只有 `{close}`，所以会话/工作区 store 由 `ctx.get('sessions'/'workspaces')` 取得。
+- **生命周期**：Host 的 boot 清扫定时器与计数缓存由 `ctx.effect` 持有，dispose 时清掉；Client 的 `load()` 有请求代际守卫，async `apply` 在 `await $mount` 之后注册 effect 前先检查 fiber 是否已 dispose（Cordis 4 对已 dispose 的 fiber 抛 `INACTIVE_EFFECT`），必要时立即释放已挂载的 namespace。
+
 ## 更新日志
+
+### v1.6.1
+- **修复（P1）：停止活动不再是空操作。** `archiveSession(id, { stopActivity: true })` 对已归档 id 直接返回（不写、不问、不停止），而本插件删除的会话全部已归档。现在 Host 先 `unarchiveSession(id)`、再带 `stopActivity` 重新归档，`workspace/session-stop` 才会真正派发；重新归档失败时用存储域补偿写回归档集合，并把失败原因带回 UI。新增 Host 测试用「记录调用 + 模拟早退」的 registry stub 钉住调用顺序。
+- **修复（P1）：`missing` 不再等于「日志不存在」。** `list()` 透传 `formatStatus`（`current` / `migration-required`）；归档 id 不在列表里时用 `stat(id)` + 盘面探测分三态：存在 / 真缺失 / 不可读。`purgeStaleRecords()` 只清理「真缺失」，不可读的记录**保留工作区归属与归档记录**并计入 `skippedUnreadable`；`deleteSession` / `deleteSessions` / `purgeOrphans` 对不可读日志拒绝或跳过，避免只删记录、把日志留成孤儿；界面标「不可读 · 需迁移/升级」「待迁移」，清理文案不再承诺可删。新增 Host 测试覆盖三态判定（`stat` 抛 `SessionFormatUnsupportedError` 时不摘归属；`stat` 返回 `undefined` 且盘面无日志文件才允许清理；手动删除拒绝不可读日志；待删除队列清扫不清理不可读日志）。
+- **修复（P2，稳定性）**：`countCache` 改为带上限（500）的 LRU；Host boot 清扫的 `setTimeout` 与计数缓存改由 `ctx.effect` 持有、dispose 时清理；Client 的 `load()` 加请求代际守卫，旧响应不再覆盖新状态；async `apply` 在 `await $mount` 之后注册 effect 前检查 fiber 活性，已被 dispose 时立即释放已挂载的 namespace（Cordis 4 对已 dispose 的 fiber 抛 `INACTIVE_EFFECT`）。
+- **结构**：Host 的只读日志/介质纯函数抽到 `lib/logs.js`（`resolveSessionDir` / `loadSnapshots` / `buildById` / `subtreeOf` / `probeLogState` / 路径工具），`lib/index.js` 只留服务、队列与归档集合；路径处理改用 `node:path`。客户端删除与 Host 重复的 `STALE_ROW_LABEL`，改由 `list().staleLabel` 下发，确认闸接受 `displayedTitle` 与会话 ID。
+- **manifest / 文档**：新增 `engines.dsh: ">=0.2.0-rc.1 <0.3.0-0"`（保留 `peerDependencies` 不动）；新增 16×16 单色 `icon.svg` 与 `icon` 字段，`files` 收录图标；版本 1.6.1。README 更新已核对宿主与本版本兼容范围、更正「有子会话会被拦下」「读不了也不影响删除」等失实描述，并把源码里的历史版本注释整理到本更新日志与「与 DSH 0.2.x 的接缝」。
+- 验证：`node test/plan.test.mjs`（7 项）、`node test/host.test.mjs`（12 项）、`node test/client.test.mjs`（3 项）全部通过；`node --check lib/*.js` 通过。
 
 ### v1.6.0
 - 适配 DSH `0.2.0-rc` 线：peer 范围改为 **`>=0.2.0-rc.1 <0.3.0`**，并镜像到 `devDependencies` —— 原范围 `>=0.1.7-rc.1 <0.3.0` 在严格 semver 下够不到 `0.2.0-rc.x`。
