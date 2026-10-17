@@ -31,7 +31,7 @@
 
 ## 安装
 
-要求：DSH `>=0.1.7-rc.1 <0.3.0`（已在 `0.1.7-rc.2`（web 宿主）与 `0.2.0-rc.1`（桌面应用）上实测：兼容检查通过、组成解析通过、Host 激活、客户端产物注册成功）与 [pnpm](https://pnpm.io/zh/)。
+要求：DSH `>=0.2.0-rc.1 <0.3.0`（已在 `0.2.0-rc.1`（web 宿主 / npm 全局 CLI）与 `0.2.0-rc.2`（桌面应用内建运行时）上校验：兼容性闸门通过、组成解析通过、Host 激活、客户端产物注册成功）与 [pnpm](https://pnpm.io/zh/)。
 
 ```bash
 # 发布态：钉死提交，最稳定
@@ -71,6 +71,14 @@ dsh plugin --profile web remove dsh-archived-sessions
 归档集合存在 workspace 存储域（version 2）的 `archivedSessionIds` 字段里；删除通过 Host 的 `shell` 服务执行平台命令。改完源码：Host 重启 DSH，Client 刷新页面，全程无需构建。
 
 ## 更新日志
+
+### v1.6.0
+- 适配 DSH `0.2.0-rc` 线：peer 范围改为 **`>=0.2.0-rc.1 <0.3.0`**，并镜像到 `devDependencies` —— 原范围 `>=0.1.7-rc.1 <0.3.0` 在严格 semver 下够不到 `0.2.0-rc.x`。
+- 新增 `locale/en.json` + `locale/zh.json` 展示元数据（插件页标题 / 描述），随 `exports["./locale/*.json"]` 与 `files` 一并发布。
+- 删除 ≤0.1.2 宿主兼容分支：`SessionPersistence.listSnapshots()`、`locate()`、`shell.run()` 兜底。
+- 删除 `STALE_ROW_LABEL_LEGACY`：客户端与宿主同包，`displayedTitle` 已覆盖该场景。
+- 保留 `sessionQuery` 回退（仍是可达路径）与 `persistence.config.root`；头注释按 `0.2.0-rc.2` 的 seam 与 session v4 盘面事实更新。
+- 验证：`npm test` 15/15 通过。
 
 ### v1.5.3
 - **修复（删除后侧栏残留 → 复活的归档记录）**：用「批量删除」删掉已归档会话后，它们会以**未分组**的形态重新出现在侧栏；再对着这个残留行点「归档会话」，本页就出现「数据缺失的会话」。根因不是删除本身（日志目录、工作区归属、归档记录三项都真的清了），而是**删除结果的传播**与**失效记录的善后**：
