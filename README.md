@@ -33,7 +33,7 @@
 
 ## 安装
 
-要求：DSH `>=0.2.0-rc.1 <0.3.0-0`（由 `engines.dsh` 声明；`peerDependencies` 里保留 typert-protocol 的同范围声明，0.2.0-rc.2 的闸门只认 peer）与 [pnpm](https://pnpm.io/zh/)。已核对宿主（静态契约核对，安装后仍需在目标宿主冒烟）：**`0.2.0-rc.2`（web 宿主 / npm 全局 CLI）** 与 **`0.2.1-rc.1`（桌面应用内建运行时）** —— 兼容性闸门、组成解析、Host 激活、客户端产物注册均通过。
+要求：DSH `>=0.2.0-rc.1 <0.3.0-0`（由 `engines.dsh` 声明；`peerDependencies` 里保留 typert-protocol 的同范围声明，0.2.0-rc.2 的闸门只认 peer）与 [pnpm](https://pnpm.io/zh/)。已核对宿主（静态契约核对，安装后仍需在目标宿主冒烟）：**`0.2.0-rc.2`（web 宿主 / npm 全局 CLI）** 与 **`0.2.1-rc.2`（桌面应用当前内建运行时）** —— 兼容性闸门、组成解析、Host 激活、客户端产物注册均通过；上一轮逐点静态核对基线为 `0.2.1-rc.1`，rc.2 上已完成加载激活，行为仍需按下方步骤冒烟。
 
 ```bash
 # 发布态：钉死提交，最稳定
@@ -48,7 +48,7 @@ dsh plugin --profile web remove dsh-archived-sessions
 
 装完**重启 DSH**。之后只有界面（Client）改动刷新页面（Ctrl+F5）即可，Host 改动需要重启。
 
-**桌面版（DeepSeek Harness 桌面应用）**：`desktop` profile 由桌面应用独占，`dsh plugin --profile desktop ...` 会被 CLI 直接拒绝（`profile "desktop" is managed exclusively by the Electron application`）。请在桌面应用侧边栏的**插件**页里用**绝对路径**添加本插件目录（或 GitHub 仓库地址），装完重启应用生效。桌面应用自带 Node / pnpm 运行时并走应用内更新（不依赖 npm 全局安装），它的 DSH 版本可能与全局 CLI 不同（实测桌面 `0.2.1-rc.1`、web / 全局 CLI `0.2.0-rc.2`），本插件对两者都通过兼容检查。
+**桌面版（DeepSeek Harness 桌面应用）**：`desktop` profile 由桌面应用独占，`dsh plugin --profile desktop ...` 会被 CLI 直接拒绝（`profile "desktop" is managed exclusively by the Electron application`）。请在桌面应用侧边栏的**插件**页里用**绝对路径**添加本插件目录（或 GitHub 仓库地址），装完重启应用生效。桌面应用自带 Node / pnpm 运行时并走应用内更新（不依赖 npm 全局安装），它的 DSH 版本可能与全局 CLI 不同（当前实测桌面 `0.2.1-rc.2`、web / 全局 CLI `0.2.0-rc.2`），本插件对两者都通过兼容检查。
 
 ## 常见问题
 
@@ -78,7 +78,7 @@ dsh plugin --profile web remove dsh-archived-sessions
 
 ### 与 DSH 0.2.x 的接缝（为什么代码写成这样）
 
-这些是源码注释里不再逐条记账的运行时事实（0.2.0-rc.2 与 0.2.1-rc.1 逐点核对过）：
+这些是源码注释里不再逐条记账的运行时事实（0.2.0-rc.2 与 0.2.1-rc.1 逐点核对过；当前桌面安装已升级到 0.2.1-rc.2）：
 
 - **归档集合与存储域**：`storageDomain.get('workspace').global.get()` 返回存储域持有的同一个状态对象；registry 每次 `requireState()` 都重新读它。本插件因此原地修改 `archivedSessionIds` 并 `set`，写失败时回滚。官方写入用新对象（`{...state, archivedSessionIds:[...]}`），语义等价；插件不复刻它的 pin 处理，因为归档集合之外只动这一步。
 - **停止活动**：`archiveSession(id, { stopActivity: true })` 先查归档集合，命中就 `return`；否则 `sessionKnown`，写入归档（顺带清 pin），最后 `stopSessionActivity` → `ctx.parallel('workspace/session-stop')`。`unarchiveSession(id)` 不做存在性检查，不在集合里也直接返回。两者在两个目标版本里一致，所以「先 unarchive、再 archive(stopActivity)」是公开方法组合，不需要私有接缝。
